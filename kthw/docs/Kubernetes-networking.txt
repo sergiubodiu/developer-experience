@@ -1,0 +1,196 @@
+#The Kubernetes Networking Model
+
+Kubernetes provides a powerful networking model which allows pods to communicate with one another over a virtual network, regardless of what host they are running on. However, Kubernetes networking can be confusing for those who are not familiar with the architecture behind networking in Kubernetes.  
+
+You can find more information on the Kubernetes networking model in the official docs: https://kubernetes.io/docs/concepts/cluster-administration/networking/
+
+### What problems does the networking model solve
+* How ill containers communicate with each other ?
+* What if the containers are on different hosts (worker nodes) ?
+* How will containers communicate with services ?
+* How will containers be assigned unique IP addresses? * What port(s) will be used?
+
+### The Docker Model
+
+* Docker allows containers to communicate with one another using a virtual network bridge configured on the host.
+* Each host has its own virtual network serving all the containers on that host.
+* We have to proxy traffic from the host to the containers, making sure no two containers use the same port on the host.
+
+### The Network Model
+
+* One virtual network for the whole cluster-administration/networking/
+* Each pod has a unique IP within the cluster-administration/networking/
+* Each service has a unique IP that is in a different range than pod IPs
+
+# Cluster Network Architecture
+
+There are several components involved in implementing networking in a Kubernetes cluster.  It also introduces Weave Net and how to implement a virtual cluster network. 
+
+* Cluster CIDR: IP range used to assign IPs to pods in the cluster. In this course, we'll be using a cluster CIDR of 10.200.0.0/16
+* Service Cluster IP Range: IP range for services in the cluster. This should not overlap with the cluster CIDR range! In this course, our service cluster IP range is 10.32.0.0/24
+* Pod CIDR: IP range for pods on a specific worker node. This range should fall within the cluster CIDR but not overlap whith the pod CDR of any other worker node. In this course, our networking plugin will automatically handle IP allocation to nodes, so we do not need to manually set a pod CIDR.
+
+# Installing Weave Net
+You can find more information about Weave Net here: https://github.com/weaveworks/weave
+
+We are now ready to set up networking in our Kubernetes cluster. This lesson guides you through the process of installing Weave Net in the cluster. It also shows you how to test your cluster network to make sure that everything is working as expected so far. After completing this lesson, you should have a functioning cluster network within your Kubernetes cluster.
+
+You can configure Weave Net like this:
+
+First, log in to both worker nodes and enable IP forwarding:
+
+sudo sysctl net.ipv4.conf.all.forwarding=1
+echo "net.ipv4.conf.all.forwarding=1" | sudo tee -a /etc/sysctl.conf
+
+The remaining commands can be done using kubectl. To connect with kubectl, you can either log in to one of the control nodes and run kubectl there or open an SSH tunnel for port 6443 to the load balancer server and use kubectl locally.
+
+### You can open the SSH tunnel by running this in a separate terminal. Leave the session open while you are working to keep the tunnel active:
+
+### ssh -L 6443:localhost:6443 user@<your Load balancer cloud server public IP>
+
+### Install Weave Net like this:
+
+kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')&env.IPALLOC_RANGE=10.200.0.0/16"
+
+### Now Weave Net is installed, but we need to test our network to make sure everything is working.
+
+kubectl get pods -n kube-system
+
+This should return two Weave Net pods, and look something like this:
+
+NAME              READY     STATUS    RESTARTS   AGE
+weave-net-m69xq   2/2       Running   0          11s
+weave-net-vmb2n   2/2       Running   0          11s
+
+Next, we want to test that pods can connect to each other and that they can connect to services. We will set up two Nginx pods and a service for those two pods. Then, we will create a busybox pod and use it to test connectivity to both Nginx pods and the service.
+
+### Create an Nginx deployment with 2 replicas:
+
+cat << EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+spec:
+  selector:
+    matchLabels:
+      run: nginx
+  replicas: 2
+  template:
+    metadata:
+      labels:
+        run: nginx
+    spec:
+      containers:
+      - name: my-nginx
+        image: nginx
+        ports:
+        - containerPort: 80
+EOF
+
+### Create a service for that deployment so that we can test connectivity to services as well:
+
+kubectl expose deployment/nginx
+
+### Now let's start up another pod. We will use this pod to test our networking. We will test whether we can connect to the other pods and services from this pod.
+
+kubectl run busybox --image=radial/busyboxplus:curl --command -- sleep 3600
+POD_NAME=$(kubectl get pods -l run=busybox -o jsonpath="{.items[0].metadata.name}")
+
+### Now let's get the IP addresses of our two Nginx pods:
+
+kubectl get ep nginx
+
+There should be two IP addresses listed under ENDPOINTS, for example:
+
+NAME      ENDPOINTS                       AGE
+nginx     10.200.0.2:80,10.200.128.1:80   50m
+
+Now let's make sure the busybox pod can connect to the Nginx pods on both of those IP addresses.
+
+kubectl exec $POD_NAME -- curl <first nginx pod IP address>
+kubectl exec $POD_NAME -- curl <second nginx pod IP address>
+
+Both commands should return some HTML with the title "Welcome to Nginx!"
+
+### Verify that we can connect to services.
+
+kubectl get svc
+
+This should display the IP address for our Nginx service. For example, in this case, the IP is 10.32.0.140:
+
+NAME         TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)   AGE
+kubernetes   ClusterIP   10.32.0.1     <none>        443/TCP   20h
+nginx        ClusterIP   10.32.0.140   <none>        80/TCP    3m
+
+Let's see if we can access the service from the busybox pod!
+
+kubectl exec $POD_NAME -- curl <nginx service IP address>
+
+This should also return HTML with the title "Welcome to Nginx!"
+
+This means that we have successfully reached the Nginx service from inside a pod and that our networking configuration is working!
+
+
+You can clean up the testing objects from the previous lesson like so:
+
+kubectl delete deployment busybox
+kubectl delete deployment nginx
+kubectl delete svc nginx
+
+# DNS In a Kubernetes Pod Network
+
+What Does DNS Do Inside a Pod Network?
+* Provides a DNS service to tbe used by pods within the network.
+* Configure containers to use the DNS service to perform DNS lookups.
+
+for example:
+1. Access services using DNS names assigned to them.
+2. Access other pods using DNS names.
+
+
+You can find more information about Kubernetes DNS here: https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/
+
+# Deploying Kube-dns to the Cluster
+
+Kube-dns is an easy-to-use solution for providing DNS service in a Kubernetes cluster. This lesson guides you through the process of installing kube-dns in your cluster, as well as testing your DNS setup to make sure that it is working. After completing this lesson, you should have a working kube-dns installation in your cluster, and pods should be able to successfully use your DNS.
+
+
+### Install kube-dns like so:
+
+kubectl create -f https://storage.googleapis.com/kubernetes-the-hard-way/kube-dns.yaml
+
+### Verify that the kube-dns pod starts up correctly:
+
+kubectl get pods -l k8s-app=kube-dns -n kube-system
+
+### You should get output showing the kube-dns pod. It should look something like this:
+
+NAME                        READY     STATUS    RESTARTS   AGE
+kube-dns-598d7bf7d4-spbmj   3/3       Running   0          36s
+
+Make sure that 3/3 containers are ready, and that the pod has a status of Running. It may take a moment for the pod to be fully up and running, so if READY is not 3/3 at first, check again after a few moments.
+
+### Test our kube-dns installation by doing a DNS lookup from within a pod. First, we need to start up a pod that we can use for testing:
+
+kubectl run busybox --image=busybox:1.28 --command -- sleep 3600
+POD_NAME=$(kubectl get pods -l run=busybox -o jsonpath="{.items[0].metadata.name}")
+
+### run an nslookup from inside the busybox container:
+
+kubectl exec -ti $POD_NAME -- nslookup kubernetes
+
+You should get output that looks something like this:
+
+Server:    10.32.0.10
+Address 1: 10.32.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      kubernetes
+Address 1: 10.32.0.1 kubernetes.default.svc.cluster.local
+
+
+# clean up the the objects that were created for testing:
+
+kubectl delete deployment busybox
+
+### kubectl create -f https://storage.googleapis.com/kubernetes-the-hard-way/kube-dns.yaml

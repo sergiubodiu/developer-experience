@@ -1,0 +1,46 @@
+# Deploying kube-dns in a Kubernetes Cluster
+
+Instructions & Tasks
+
+Your team has set up a new Kubernetes cluster. However, they want to provide a simple web service as a backend microservice in the cluster. In order to do so, they need a DNS set up within the Kubernetes cluster. Your task is to provide DNS service within the Kubernetes cluster using kube-dns.
+
+###  Deploy kube-dns to the cluster.
+
+kubectl create -f https://storage.googleapis.com/kubernetes-the-hard-way/kube-dns.yaml
+
+### Verify that the kube-dns pod starts up correctly:
+
+kubectl get pods -l k8s-app=kube-dns -n kube-system
+
+You should get output showing the kube-dns pod. It should look something like this:
+
+NAME                        READY     STATUS    RESTARTS   AGE
+kube-dns-598d7bf7d4-spbmj   3/3       Running   0          36s
+
+
+### Create a simple service like so:
+
+kubectl run nginx --image=nginx
+kubectl expose deployment nginx --port 80
+
+### Get a list of services:
+
+kubectl get svc
+
+
+### Spin up a busybox pod for testing and get the pod name:
+
+kubectl run busybox --image=busybox:1.28 --command -- sleep 3600
+POD_NAME=$(kubectl get pods -l run=busybox -o jsonpath="{.items[0].metadata.name}")
+
+### Perform a DNS lookup of the nginx service from within the busybox pod to verify that DNS is working:
+
+kubectl exec $POD_NAME -- nslookup nginx
+
+You should get output that looks like this:
+
+Server:    10.32.0.10
+Address 1: 10.32.0.10 kube-dns.kube-system.svc.cluster.local
+
+Name:      nginx
+Address 1: 10.32.0.248 nginx.default.svc.cluster.local

@@ -1,0 +1,68 @@
+Implementing a Full CI/CD Pipeline
+
+## Installing Git
+
+You can find additional documentation on these topics in the following locations:
+Git installation instructions: https://git-scm.com/downloads .
+
+yum -y install git
+
+GitHub ssh authentication setup documentation:
+https://help.github.com/articles/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent/
+https://help.github.com/articles/adding-a-new-ssh-key-to-your-github-account/
+
+
+## Build Automation
+
+Before you can begin using Gradle to create build automation, you need to be able to install it. This lesson will walk you through the process of installing Gradle. It will also introduce you to a slightly more advanced way of installing and using Gradle, known as the Gradle Wrapper. After completing this lesson, you should be able to install Gradle and the Gradle Wrapper so that you can execute Gradle builds.
+
+You can find more information about installing Gradle at https://gradle.org/install/
+
+Here are the commands used in the demo to install gradle:
+
+cd ~/
+wget -O ~/gradle-4.7-bin.zip https://services.gradle.org/distributions/gradle-4.7-bin.zip
+sudo yum -y install unzip java-1.8.0-openjdk
+sudo mkdir /opt/gradle
+sudo unzip -d /opt/gradle/ ~/gradle-4.7-bin.zip
+sudo vi /etc/profile.d/gradle.sh
+
+Put this text into gradle.sh:
+
+export PATH=$PATH:/opt/gradle/gradle-4.7/bin
+
+Then set permissions on gradle.sh:
+
+sudo chmod 755 /etc/profile.d/gradle.sh
+
+Finally, after logging out of the server and logging back in:
+
+gradle --version
+
+And the commands used to install and run the Gradle Wrapper:
+
+cd ~/
+mkdir my-project
+cd my-project
+gradle wrapper
+./gradlew build
+
+Here is the final build.gradle from the demo:
+
+plugins {
+  id 'com.moowork.node' version '1.2.0'
+}
+
+task sayHello << {
+  println 'Hello, World!'
+}
+
+task anotherTask << {
+  println 'This is another task'
+}
+
+If you have the gradle wrapper installed in your project (for example, by using gradle init), you can run the build defined in this build.gradle like so:
+
+./gradlew sayHello
+
+./gradlew nodeSetup

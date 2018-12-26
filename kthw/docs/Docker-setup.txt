@@ -1,0 +1,99 @@
+
+   
+   
+ssh -oStrictHostKeyChecking=no user@54.164.142.130
+
+ssh -L 6443:localhost:6443 user@<your Load balancer cloud server public IP>
+
+ssh -L 6443:localhost:6443 user@54.164.142.130
+
+# Guide to Containers and Orchestration
+
+The cloud is one of of the greatest areas of innovation that is active in the IT industry today. Containers are often talked about in the context of the cloud, and the combination of containers and cloud technologies can provide some unique benefits. In this lesson, we will discuss what the cloud is and how containers relate to the cloud. Specifically, we will talk about what it means to run containers in the cloud. After completing this lesson, you will have a basic understanding of the cloud and its relationship to containers.
+
+## What About Other Orchestration Solutions
+
+Orchestration Tools:
+
+    Docker Swarm: https://docs.docker.com/engine/swarm/
+    Marathon: https://mesosphere.github.io/marathon/
+    Nomad: https://www.nomadproject.io/
+
+Cloud Orchestration Solutions:
+
+    Amazon Elastic Container Service: https://aws.amazon.com/ecs/
+    Amazon ECS for Kubernetes: https://aws.amazon.com/eks/
+    Azure Kubernetes Service: https://azure.microsoft.com/en-us/services/kubernetes-service/
+    Google Kubernetes Engine: https://cloud.google.com/kubernetes-engine/
+
+
+yum install -y yum-utils device-mapper-persistent-data lvm2
+
+## yum update
+yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+yum install -y docker-ce
+
+### Run docker as non-root user groupadd docker
+usermod -aG docker cloud_user
+
+### Complete docker install
+systemctl enable --now docker && systemctl status docker
+
+### Configure Storage
+cat << EOF | sudo tee /etc/docker/daemon.json
+{
+  "storage-driver":"devicemapper"
+}
+EOF
+
+docker info | grep Storage
+
+## Configuring Logging Drivers (Syslog, JSON-File, etc.)
+
+docker info | grep Logging
+
+## Install a Swarm Manager and Worker Node
+
+systemctl disable firewalld && systemctl stop firewalld 
+
+## Setup demo hosts
+echo "10.0.0.11 mgr01" >> /etc/hosts
+echo "10.0.0.12 node01" >> /etc/hosts
+
+
+## Setup Swarm Manager and Join Cluster
+docker swarm init --advertise-addr 10.0.0.11
+
+docker swarm join --token ${TOKEN} 10.0.0.11:2377
+
+docker node ls
+
+ID                            HOSTNAME                    STATUS              AVAILABILITY        MANAGER STATUS      ENGINE VERSION
+l2boxvjybcu59emf5b1xsyvan *   ip-10-0-0-11.ec2.internal   Ready               Active              Leader              18.09.0
+zn1ogcl91md6vimx8m2rs4kq6     ip-10-0-0-12.ec2.internal   Ready               Active                                  18.09.0
+
+
+
+                        docker run -d --name testweb1 --mount type=bind,source=/root/version1,target=/usr/local/apache2/htdocs httpd
+fad115df20acfac303f893157ab7f57e81841b9fbcdf1d2fd2ed1c514591eb2e
+[root@ip-10-0-0-11 ~]#  docker run -d --name testweb2 --mount type=bind,source=/root/version2,target=/usr/local/apache2/htdocs httpd
+2c08238c208e5ce1631f973c325a1d7212d4b8e97e5cad8437ea65a4879ef0c5
+[root@ip-10-0-0-11 ~]# docker ps
+CONTAINER ID        IMAGE               COMMAND              CREATED
+    STATUS              PORTS               NAMES
+2c08238c208e        httpd               "httpd-foreground"   5 seconds ago
+    Up 4 seconds        80/tcp              testweb2
+fad115df20ac        httpd               "httpd-foreground"   35 seconds ago
+    Up 34 seconds       80/tcp              testweb1
+[root@ip-10-0-0-11 ~]# docker container inspect testweb1 | grep IPAddress
+            "SecondaryIPAddresses": null,
+            "IPAddress": "172.17.0.2",
+                    "IPAddress": "172.17.0.2",
+[root@ip-10-0-0-11 ~]# docker container inspect testweb2 | grep IPAddress
+            "SecondaryIPAddresses": null,
+            "IPAddress": "172.17.0.3",
+                    "IPAddress": "172.17.0.3",
+[root@ip-10-0-0-11 ~]# docker container inspect --format="{{.NetworkSettings.Networks.bridge.IPAddress}}" testweb1
+172.17.0.2
+[root@ip-10-0-0-11 ~]# docker container inspect --format="{{.NetworkSettings.Networks.bridge.IPAddress}}" testweb2
+172.17.0.3
